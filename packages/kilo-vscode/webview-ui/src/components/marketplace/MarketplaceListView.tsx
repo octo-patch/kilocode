@@ -1,5 +1,8 @@
 import { Component, createSignal, createMemo, Show, For } from "solid-js"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
+import { TextField } from "@kilocode/kilo-ui/text-field"
+import { Select } from "@kilocode/kilo-ui/select"
+import { Tag } from "@kilocode/kilo-ui/tag"
 import { useLanguage } from "../../context/language"
 import type { MarketplaceItem, MarketplaceInstalledMetadata } from "../../types/marketplace"
 import { ItemCard } from "./ItemCard"
@@ -14,11 +17,21 @@ interface MarketplaceListViewProps {
   onRemove: (item: MarketplaceItem, scope: "project" | "global") => void
 }
 
+type StatusFilter = "all" | "installed" | "notInstalled"
+
+const STATUS_OPTIONS: StatusFilter[] = ["all", "installed", "notInstalled"]
+
 export const MarketplaceListView: Component<MarketplaceListViewProps> = (props) => {
   const { t } = useLanguage()
   const [search, setSearch] = createSignal("")
-  const [status, setStatus] = createSignal<"all" | "installed" | "notInstalled">("all")
+  const [status, setStatus] = createSignal<StatusFilter>("all")
   const [tags, setTags] = createSignal<string[]>([])
+
+  const statusLabel = (s: StatusFilter) => {
+    if (s === "all") return t("marketplace.filter.all")
+    if (s === "installed") return t("marketplace.installed")
+    return t("marketplace.filter.notInstalled")
+  }
 
   const allTags = createMemo(() => {
     const set = new Set<string>()
@@ -46,18 +59,15 @@ export const MarketplaceListView: Component<MarketplaceListViewProps> = (props) 
     const filter = status()
 
     return props.items.filter((item) => {
-      // Search filter
       if (query) {
         const name = item.name.toLowerCase()
         const desc = item.description.toLowerCase()
         if (!name.includes(query) && !desc.includes(query)) return false
       }
 
-      // Status filter
       if (filter === "installed" && !isInstalled(item.id, item.type, props.metadata)) return false
       if (filter === "notInstalled" && isInstalled(item.id, item.type, props.metadata)) return false
 
-      // Tag filter (OR logic)
       if (selected.length > 0) {
         const itemTags = item.tags ?? []
         if (!selected.some((t) => itemTags.includes(t))) return false
@@ -70,30 +80,30 @@ export const MarketplaceListView: Component<MarketplaceListViewProps> = (props) 
   return (
     <div>
       <div class="marketplace-filters">
-        <input
-          type="text"
+        <TextField
           placeholder={t("marketplace.search")}
           value={search()}
-          onInput={(e) => setSearch(e.currentTarget.value)}
-          class="marketplace-search"
+          onChange={setSearch}
+          hideLabel
+          class="marketplace-search-field"
         />
-        <select
-          value={status()}
-          onChange={(e) => setStatus(e.currentTarget.value as "all" | "installed" | "notInstalled")}
-          class="marketplace-status-filter"
-        >
-          <option value="all">{t("marketplace.filter.all")}</option>
-          <option value="installed">{t("marketplace.installed")}</option>
-          <option value="notInstalled">{t("marketplace.filter.notInstalled")}</option>
-        </select>
+        <Select
+          options={STATUS_OPTIONS}
+          current={status()}
+          onSelect={(v) => v && setStatus(v)}
+          label={statusLabel}
+          value={(s) => s}
+          variant="secondary"
+          size="small"
+        />
       </div>
 
       <Show when={tags().length > 0}>
         <div class="marketplace-active-tags">
           <For each={tags()}>
             {(tag) => (
-              <button class="marketplace-badge tag active" onClick={() => toggleTag(tag)}>
-                {tag} ×
+              <button class="marketplace-tag-filter active" onClick={() => toggleTag(tag)}>
+                <Tag>{tag} ×</Tag>
               </button>
             )}
           </For>
@@ -124,8 +134,8 @@ export const MarketplaceListView: Component<MarketplaceListViewProps> = (props) 
                 footer={
                   <For each={item.tags ?? []}>
                     {(tag) => (
-                      <button class="marketplace-badge tag" onClick={() => toggleTag(tag)}>
-                        {tag}
+                      <button class="marketplace-tag-filter" onClick={() => toggleTag(tag)}>
+                        <Tag>{tag}</Tag>
                       </button>
                     )}
                   </For>

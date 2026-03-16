@@ -1,5 +1,8 @@
 import { Component, createSignal, createMemo, Show, For } from "solid-js"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
+import { TextField } from "@kilocode/kilo-ui/text-field"
+import { RadioGroup } from "@kilocode/kilo-ui/radio-group"
+import { Tag } from "@kilocode/kilo-ui/tag"
 import { useLanguage } from "../../context/language"
 import type { MarketplaceItem, MarketplaceInstalledMetadata, SkillMarketplaceItem } from "../../types/marketplace"
 import { ItemCard } from "./ItemCard"
@@ -12,10 +15,12 @@ interface SkillsMarketplaceProps {
   onRemove: (item: MarketplaceItem, scope: "project" | "global") => void
 }
 
+const ALL = "__all__"
+
 export const SkillsMarketplace: Component<SkillsMarketplaceProps> = (props) => {
   const { t } = useLanguage()
   const [search, setSearch] = createSignal("")
-  const [category, setCategory] = createSignal<string | null>(null)
+  const [category, setCategory] = createSignal(ALL)
 
   const skills = createMemo(() => props.items.filter((i): i is SkillMarketplaceItem => i.type === "skill"))
 
@@ -24,7 +29,7 @@ export const SkillsMarketplace: Component<SkillsMarketplaceProps> = (props) => {
     for (const item of skills()) {
       if (item.displayCategory) set.add(item.displayCategory)
     }
-    return [...set].sort()
+    return [ALL, ...[...set].sort()]
   })
 
   const filtered = createMemo(() => {
@@ -48,7 +53,7 @@ export const SkillsMarketplace: Component<SkillsMarketplaceProps> = (props) => {
           return false
       }
 
-      if (cat && item.displayCategory !== cat) return false
+      if (cat !== ALL && item.displayCategory !== cat) return false
 
       return true
     })
@@ -56,30 +61,23 @@ export const SkillsMarketplace: Component<SkillsMarketplaceProps> = (props) => {
 
   return (
     <div>
-      <input
-        type="text"
+      <TextField
         placeholder={t("marketplace.searchSkills")}
         value={search()}
-        onInput={(e) => setSearch(e.currentTarget.value)}
-        class="marketplace-search"
-        style={{ width: "100%", "margin-bottom": "12px" }}
+        onChange={setSearch}
+        hideLabel
+        class="marketplace-search-field"
       />
 
-      <div class="skills-categories">
-        <button classList={{ active: !category() }} onClick={() => setCategory(null)}>
-          {t("marketplace.categoryAll")}
-        </button>
-        <For each={categories()}>
-          {(cat) => (
-            <button
-              classList={{ active: category() === cat }}
-              onClick={() => setCategory(category() === cat ? null : cat)}
-            >
-              {cat}
-            </button>
-          )}
-        </For>
-      </div>
+      <RadioGroup
+        options={categories()}
+        current={category()}
+        onSelect={(v) => setCategory(v ?? ALL)}
+        label={(c) => (c === ALL ? t("marketplace.categoryAll") : c)}
+        value={(c) => c}
+        size="small"
+        class="marketplace-categories"
+      />
 
       <Show when={props.fetching}>
         <div class="marketplace-loading">
@@ -104,7 +102,7 @@ export const SkillsMarketplace: Component<SkillsMarketplaceProps> = (props) => {
                 linkUrl={item.githubUrl || undefined}
                 footer={
                   <Show when={item.displayCategory}>
-                    <span class="marketplace-badge tag">{item.displayCategory}</span>
+                    <Tag>{item.displayCategory}</Tag>
                   </Show>
                 }
               />

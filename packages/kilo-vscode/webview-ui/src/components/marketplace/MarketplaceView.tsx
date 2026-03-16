@@ -1,16 +1,8 @@
-import {
-  Component,
-  createSignal,
-  createMemo,
-  createEffect,
-  on,
-  onMount,
-  onCleanup,
-  Switch,
-  Match,
-  Show,
-  For,
-} from "solid-js"
+import { Component, createSignal, createMemo, createEffect, on, onMount, onCleanup, For, Show } from "solid-js"
+import { Tabs } from "@kilocode/kilo-ui/tabs"
+import { Card } from "@kilocode/kilo-ui/card"
+import { IconButton } from "@kilocode/kilo-ui/icon-button"
+import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { useVSCode } from "../../context/vscode"
 import { useServer } from "../../context/server"
 import { useLanguage } from "../../context/language"
@@ -22,25 +14,21 @@ import { InstallModal } from "./InstallModal"
 import { RemoveDialog } from "./RemoveDialog"
 import "./marketplace.css"
 
-type Tab = "mcp" | "mode" | "skill"
-
 export const MarketplaceView: Component = () => {
   const vscode = useVSCode()
   const server = useServer()
+  const dialog = useDialog()
   const { t } = useLanguage()
 
   const [items, setItems] = createSignal<MarketplaceItem[]>([])
   const [metadata, setMetadata] = createSignal<MarketplaceInstalledMetadata>({ project: {}, global: {} })
   const [fetching, setFetching] = createSignal(true)
   const [errors, setErrors] = createSignal<string[]>([])
-  const [tab, setTab] = createSignal<Tab>("mcp")
+  const [tab, setTab] = createSignal("mcp")
   const mcpItems = createMemo(() => items().filter((i) => i.type === "mcp"))
   const modeItems = createMemo(() => items().filter((i) => i.type === "mode"))
   const skillItems = createMemo(() => items().filter((i) => i.type === "skill"))
 
-  const [installItem, setInstallItem] = createSignal<MarketplaceItem | null>(null)
-  const [removeItem, setRemoveItem] = createSignal<MarketplaceItem | null>(null)
-  const [removeScope, setRemoveScope] = createSignal<"project" | "global">("project")
   const [pendingRemove, setPendingRemove] = createSignal<{ item: MarketplaceItem; scope: "project" | "global" } | null>(
     null,
   )
@@ -52,12 +40,18 @@ export const MarketplaceView: Component = () => {
       event: "Marketplace Install Button Clicked",
       properties: { itemId: item.id, itemType: item.type, itemName: item.name },
     })
-    setInstallItem(item)
+    dialog.show(() => <InstallModal item={item} onClose={dialog.close} onInstallResult={handleInstallResult} />)
   }
 
   const handleRemove = (item: MarketplaceItem, scope: "project" | "global") => {
-    setRemoveItem(item)
-    setRemoveScope(scope)
+    dialog.show(() => (
+      <RemoveDialog
+        item={item}
+        scope={scope}
+        onClose={dialog.close}
+        onConfirm={() => handleRemoveConfirm(item, scope)}
+      />
+    ))
   }
 
   const handleInstallResult = (result: {
@@ -67,28 +61,22 @@ export const MarketplaceView: Component = () => {
     error?: string
   }) => {
     if (!result.success) return
-    const item = installItem()
-    if (item) {
-      vscode.postMessage({
-        type: "telemetry",
-        event: "Marketplace Item Installed",
-        properties: { itemId: item.id, itemType: item.type, itemName: item.name, target: result.scope },
-      })
-    }
+    vscode.postMessage({
+      type: "telemetry",
+      event: "Marketplace Item Installed",
+      properties: { itemId: result.slug, itemType: "unknown", itemName: result.slug, target: result.scope },
+    })
     vscode.postMessage({ type: "fetchMarketplaceData" })
   }
 
-  const handleRemoveConfirm = () => {
-    const item = removeItem()
-    if (!item) return
-    const scope = removeScope()
+  const handleRemoveConfirm = (item: MarketplaceItem, scope: "project" | "global") => {
     setPendingRemove({ item, scope })
     vscode.postMessage({
       type: "removeInstalledMarketplaceItem",
       mpItem: item,
       mpInstallOptions: { target: scope },
     })
-    setRemoveItem(null)
+    dialog.close()
   }
 
   onMount(() => {
@@ -101,11 +89,6 @@ export const MarketplaceView: Component = () => {
         setMetadata(msg.marketplaceInstalledMetadata)
         setErrors(msg.errors ?? [])
         setFetching(false)
-        return
-      }
-      if (msg.type === "marketplaceInstallResult") {
-        // Install result handled by InstallModal's onInstallResult callback,
-        // which calls handleInstallResult and triggers fetchMarketplaceData
         return
       }
       if (msg.type === "marketplaceRemoveResult") {
@@ -148,31 +131,29 @@ export const MarketplaceView: Component = () => {
 
   return (
     <div class="marketplace-view">
-      <div class="marketplace-header">
-        <div class="marketplace-tabs">
-          <button class="marketplace-tab" classList={{ active: tab() === "mcp" }} onClick={() => setTab("mcp")}>
-            {t("marketplace.tab.mcp")}
-          </button>
-          <button class="marketplace-tab" classList={{ active: tab() === "mode" }} onClick={() => setTab("mode")}>
-            {t("marketplace.tab.modes")}
-          </button>
-          <button class="marketplace-tab" classList={{ active: tab() === "skill" }} onClick={() => setTab("skill")}>
-            {t("marketplace.tab.skills")}
-          </button>
-        </div>
-      </div>
-      <div class="marketplace-content">
-        <For each={errors()}>{(err) => <div class="marketplace-error-banner">{err}</div>}</For>
-        <Show when={removeError()}>
-          <div class="marketplace-error-banner">
-            {removeError()}
-            <button class="marketplace-error-dismiss" onClick={() => setRemoveError(null)}>
-              ×
-            </button>
-          </div>
-        </Show>
-        <Switch>
-          <Match when={tab() === "mcp"}>
+      <Tabs value={tab()} onChange={setTab} class="marketplace-tabs-root">
+        <Tabs.List>
+          <Tabs.Trigger value="mcp">{t("marketplace.tab.mcp")}</Tabs.Trigger>
+          <Tabs.Trigger value="mode">{t("marketplace.tab.modes")}</Tabs.Trigger>
+          <Tabs.Trigger value="skill">{t("marketplace.tab.skills")}</Tabs.Trigger>
+        </Tabs.List>
+
+        <div class="marketplace-content">
+          <For each={errors()}>
+            {(err) => (
+              <Card variant="error" class="marketplace-error-banner">
+                {err}
+              </Card>
+            )}
+          </For>
+          <Show when={removeError()}>
+            <Card variant="error" class="marketplace-error-banner">
+              {removeError()}
+              <IconButton icon="close" variant="ghost" size="small" onClick={() => setRemoveError(null)} />
+            </Card>
+          </Show>
+
+          <Tabs.Content value="mcp">
             <MarketplaceListView
               type="mcp"
               items={mcpItems()}
@@ -181,8 +162,8 @@ export const MarketplaceView: Component = () => {
               onInstall={handleInstall}
               onRemove={handleRemove}
             />
-          </Match>
-          <Match when={tab() === "mode"}>
+          </Tabs.Content>
+          <Tabs.Content value="mode">
             <MarketplaceListView
               type="mode"
               items={modeItems()}
@@ -191,8 +172,8 @@ export const MarketplaceView: Component = () => {
               onInstall={handleInstall}
               onRemove={handleRemove}
             />
-          </Match>
-          <Match when={tab() === "skill"}>
+          </Tabs.Content>
+          <Tabs.Content value="skill">
             <SkillsMarketplace
               items={skillItems()}
               metadata={metadata()}
@@ -200,16 +181,9 @@ export const MarketplaceView: Component = () => {
               onInstall={handleInstall}
               onRemove={handleRemove}
             />
-          </Match>
-        </Switch>
-      </div>
-      <InstallModal item={installItem()} onClose={() => setInstallItem(null)} onInstallResult={handleInstallResult} />
-      <RemoveDialog
-        item={removeItem()}
-        scope={removeScope()}
-        onClose={() => setRemoveItem(null)}
-        onConfirm={handleRemoveConfirm}
-      />
+          </Tabs.Content>
+        </div>
+      </Tabs>
     </div>
   )
 }

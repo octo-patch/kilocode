@@ -1,4 +1,7 @@
 import { Component, Show, For, createMemo, JSX } from "solid-js"
+import { Card } from "@kilocode/kilo-ui/card"
+import { Button } from "@kilocode/kilo-ui/button"
+import { Tag } from "@kilocode/kilo-ui/tag"
 import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
 import type { MarketplaceItem, MarketplaceInstalledMetadata } from "../../types/marketplace"
@@ -9,13 +12,9 @@ interface ItemCardProps {
   metadata: MarketplaceInstalledMetadata
   onInstall: (item: MarketplaceItem) => void
   onRemove: (item: MarketplaceItem, scope: "project" | "global") => void
-  /** Display name override (defaults to item.name) */
   displayName?: string
-  /** External link URL (e.g. item.url for MCPs, item.githubUrl for skills) */
   linkUrl?: string
-  /** Type badge text shown next to author (e.g. "MCP Server", "Mode") */
   typeBadge?: string
-  /** Footer content rendered after the installed badge */
   footer?: JSX.Element
 }
 
@@ -35,7 +34,7 @@ export const ItemCard: Component<ItemCardProps> = (props) => {
     scope === "project" ? t("marketplace.scope.project") : t("marketplace.scope.global")
 
   return (
-    <div class="marketplace-card">
+    <Card class="marketplace-card">
       <div class="marketplace-card-header">
         <div>
           <Show when={props.linkUrl} fallback={<span class="marketplace-card-name">{name()}</span>}>
@@ -53,26 +52,28 @@ export const ItemCard: Component<ItemCardProps> = (props) => {
           <span class="marketplace-card-author">
             {props.item.author && t("marketplace.card.by", { author: props.item.author })}
             <Show when={props.typeBadge}>
-              <span class="marketplace-card-type">{props.typeBadge}</span>
+              <Tag size="normal" class="marketplace-card-type">
+                {props.typeBadge}
+              </Tag>
             </Show>
           </span>
         </div>
         <Show
           when={scopes().length > 0}
           fallback={
-            <button class="marketplace-install-btn" onClick={() => props.onInstall(props.item)}>
+            <Button variant="primary" size="small" onClick={() => props.onInstall(props.item)}>
               {t("marketplace.install")}
-            </button>
+            </Button>
           }
         >
           <div class="marketplace-remove-actions">
             <For each={scopes()}>
               {(scope) => (
-                <button class="marketplace-remove-btn" onClick={() => props.onRemove(props.item, scope)}>
+                <Button variant="secondary" size="small" onClick={() => props.onRemove(props.item, scope)}>
                   {scopes().length > 1
                     ? t("marketplace.removeScope", { scope: scopeLabel(scope) })
                     : t("marketplace.remove")}
-                </button>
+                </Button>
               )}
             </For>
           </div>
@@ -81,10 +82,10 @@ export const ItemCard: Component<ItemCardProps> = (props) => {
       <p class="marketplace-card-description">{props.item.description}</p>
       <div class="marketplace-card-footer">
         <Show when={scopes().length > 0}>
-          <span class="marketplace-badge installed">{t("marketplace.installed")}</span>
+          <Tag class="marketplace-badge-installed">{t("marketplace.installed")}</Tag>
         </Show>
         {props.footer}
       </div>
-    </div>
+    </Card>
   )
 }
