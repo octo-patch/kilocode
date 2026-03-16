@@ -29,16 +29,6 @@ function log(msg: string) {
   console.log(`[local-bin] ${msg}`)
 }
 
-function exists(path: string) {
-  try {
-    statSync(path)
-    return true
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
-    throw error
-  }
-}
-
 function platformTag(): string {
   const os = process.platform === "win32" ? "windows" : process.platform
   return `cli-${os}-${process.arch}`
@@ -98,15 +88,7 @@ async function ensureBuiltBinary(): Promise<string> {
     `No prebuilt binary found under ${relative(kiloVscodeDir, join(opencodeDir, "dist"))} - attempting build via bun.`,
   )
 
-  const bunPath = await Bun.which("bun")
-  if (!bunPath) {
-    throw new Error(
-      `Bun is required to build the CLI binary, but was not found on PATH. ` +
-        `Install bun, or build the CLI separately in ${opencodeDir} and re-run.`,
-    )
-  }
-
-  const bunFile = Bun.file(bunPath)
+  const bunFile = Bun.file(await Bun.which("bun"))
   if (!(await bunFile.exists())) {
     throw new Error(
       `Bun is required to build the CLI binary, but was not found on PATH. ` +
@@ -146,7 +128,8 @@ async function main() {
     rmSync(targetBinPath)
     // Also remove the prebuilt dist so ensureBuiltBinary() triggers a fresh build
     const distDir = join(opencodeDir, "dist")
-    if (exists(distDir)) {
+    const distFile = Bun.file(distDir)
+    if (await distFile.exists()) {
       rmSync(distDir, { recursive: true })
       log(`Removed ${relative(kiloVscodeDir, distDir)} to force rebuild.`)
     }
