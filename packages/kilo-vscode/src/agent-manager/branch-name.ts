@@ -1,3 +1,8 @@
+import friendlyWords from "friendly-words"
+
+const MAX_ATTEMPTS = 10
+const FALLBACK_MAX_SUFFIX = 100
+
 /**
  * Sanitize a string into a valid git branch name segment.
  * Keeps lowercase alphanumeric chars and hyphens, collapses runs, strips edges.
@@ -11,12 +16,47 @@ export function sanitizeBranchName(name: string, maxLength = 50): string {
     .replace(/-+/g, "-")
 }
 
+export function semanticBranchName(title: string, prefix = "", maxLength = 50): string {
+  const parts = prefix
+    .split("/")
+    .map((part) => sanitizeBranchName(part))
+    .filter(Boolean)
+  const head = parts.length > 0 ? `${parts.join("/")}/` : ""
+  const slug = sanitizeBranchName(title, Math.max(0, maxLength - head.length))
+  return slug ? `${head}${slug}` : ""
+}
+
 /**
- * Generate a valid git branch name from a prompt.
+ * Generate a natural two-word branch name (e.g. "ambitious-keyboard") using
+ * the friendly-words package.  Checks `existingBranches` to avoid collisions,
+ * falling back to a numeric suffix and ultimately a timestamp.
  */
-export function generateBranchName(prompt: string): string {
-  const sanitized = sanitizeBranchName(prompt)
-  return `${sanitized || "kilo"}-${Date.now()}`
+export function generateBranchName(_prompt: string, existingBranches: string[] = []): string {
+  const predicates = friendlyWords.predicates as string[]
+  const objects = friendlyWords.objects as string[]
+  const existing = new Set(existingBranches.map((b) => b.toLowerCase()))
+
+  const random = () => {
+    const predicate = predicates[Math.floor(Math.random() * predicates.length)]
+    const object = objects[Math.floor(Math.random() * objects.length)]
+    return `${predicate}-${object}`
+  }
+
+  // Try up to MAX_ATTEMPTS unique two-word combos
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const candidate = random()
+    if (!existing.has(candidate)) return candidate
+  }
+
+  // Append numeric suffix 0–99
+  const base = random()
+  for (let n = 0; n < FALLBACK_MAX_SUFFIX; n++) {
+    const candidate = `${base}-${n}`
+    if (!existing.has(candidate)) return candidate
+  }
+
+  // Last resort: timestamp
+  return `${base}-${Date.now()}`
 }
 
 /**

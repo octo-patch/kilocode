@@ -5,6 +5,8 @@ description: "Connect a GitHub account to your KiloClaw agent for repository acc
 
 # GitHub Integration
 
+{% partial file="kiloclaw-eol.md" /%}
+
 Connect a GitHub account to your KiloClaw agent so it can clone repositories, push commits, open pull requests, and leave code reviews — all autonomously.
 
 {% callout type="warning" title="Security" %}
@@ -28,7 +30,7 @@ Once you have a GitHub account ready, continue to Step 2.
 KiloClaw uses a [fine grained Personal Access Token](https://github.com/settings/tokens?type=beta) to authenticate as your bot. When creating the token, use these settings:
 
 | Setting | Recommended Value |
-| --- | --- |
+|---|---|
 | **Token name** | `kiloclaw-bot` (or any descriptive name) |
 | **Expiration** | 90 days (set a reminder to rotate) |
 | **Repository access** | All repositories, or select specific ones |
@@ -36,7 +38,7 @@ KiloClaw uses a [fine grained Personal Access Token](https://github.com/settings
 Grant the following permissions:
 
 | Permission | Access Level | Purpose |
-| --- | --- | --- |
+|---|---|---|
 | **Contents** | Read & Write | Clone repos, push commits |
 | **Pull requests** | Read & Write | Open and manage pull requests |
 | **Issues** | Read & Write | Create and comment on issues |

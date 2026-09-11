@@ -4,6 +4,8 @@
  */
 
 import { $ } from "bun"
+import { defaultConfig } from "./config"
+import { matches } from "./match"
 
 export interface ConflictReport {
   timestamp: string
@@ -18,7 +20,7 @@ export interface ConflictReport {
 
 export interface ConflictFile {
   path: string
-  type: "markdown" | "package" | "code" | "config" | "i18n" | "tauri" | "script" | "extension" | "web" | "other"
+  type: "markdown" | "package" | "code" | "config" | "i18n" | "script" | "extension" | "web" | "other"
   recommendation:
     | "keep-ours"
     | "keep-theirs"
@@ -27,7 +29,6 @@ export interface ConflictFile {
     | "skip"
     | "i18n-transform"
     | "take-theirs-transform"
-    | "tauri-transform"
     | "package-transform"
     | "script-transform"
     | "extension-transform"
@@ -41,16 +42,6 @@ export interface ConflictFile {
 function isI18nFile(path: string): boolean {
   // Match patterns like packages/*/src/i18n/*.ts
   return /packages\/[^/]+\/src\/i18n\/[^/]+\.ts$/.test(path) && !path.endsWith("/index.ts")
-}
-
-/**
- * Check if a file is a Tauri/Desktop config file
- */
-function isTauriFile(path: string): boolean {
-  return (
-    path.includes("packages/desktop/src-tauri/") &&
-    (path.endsWith(".json") || path.endsWith(".toml") || path.endsWith(".rs") || path.endsWith(".lock"))
-  )
 }
 
 /**
@@ -78,17 +69,7 @@ function isWebFile(path: string): boolean {
  * Check if a file should use take-theirs + transform strategy
  */
 function shouldTakeTheirsTransform(path: string): boolean {
-  const patterns = [
-    /^packages\/app\/src\/components\/.*\.tsx$/,
-    /^packages\/app\/src\/context\/.*\.tsx$/,
-    /^packages\/app\/src\/pages\/.*\.tsx$/,
-    /^packages\/ui\/src\/.*\.tsx$/,
-    /^packages\/desktop\/src\/.*\.ts$/,
-    /^packages\/app\/e2e\/.*\.ts$/,
-    /^packages\/app\/script\/.*\.ts$/,
-    /^github\/index\.ts$/,
-    /^packages\/slack\/src\/.*\.ts$/,
-  ]
+  const patterns = [/^packages\/ui\/src\/.*\.tsx$/, /^github\/index\.ts$/, /^packages\/slack\/src\/.*\.ts$/]
   return patterns.some((p) => p.test(path))
 }
 
@@ -97,7 +78,6 @@ function shouldTakeTheirsTransform(path: string): boolean {
  */
 export function classifyFile(path: string): ConflictFile["type"] {
   if (isI18nFile(path)) return "i18n"
-  if (isTauriFile(path)) return "tauri"
   if (isScriptFile(path)) return "script"
   if (isExtensionFile(path)) return "extension"
   if (isWebFile(path)) return "web"
@@ -119,16 +99,19 @@ export function classifyFile(path: string): ConflictFile["type"] {
  * Check if a file should be skipped (not added from upstream)
  */
 function shouldSkipFile(path: string, skipPatterns: string[]): boolean {
-  return skipPatterns.some((pattern) => path === pattern || path.includes(pattern))
+  return matches(path, skipPatterns)
 }
 
 /**
- * Get recommendation for a conflicted file
+ * Get recommendation for a conflicted file.
+ * Pass currentContent (our version of the file) to detect kilocode_change markers
+ * in files that would otherwise be auto-transformed.
  */
 export function getRecommendation(
   path: string,
   keepOurs: string[],
   skipFiles: string[] = [],
+  currentContent?: string,
 ): { recommendation: ConflictFile["recommendation"]; reason: string } {
   // Check if file should be skipped entirely (doesn't exist in Kilo, shouldn't be added)
   if (shouldSkipFile(path, skipFiles)) {
@@ -147,7 +130,12 @@ export function getRecommendation(
   }
 
   // Kilo directories should always keep ours
-  if (path.includes("kilocode") || path.includes("kilo-gateway") || path.includes("kilo-telemetry")) {
+  if (
+    matches(
+      path,
+      defaultConfig.kiloDirectories.map((dir) => `${dir}/**`),
+    )
+  ) {
     return {
       recommendation: "keep-ours",
       reason: "File is in a Kilo-specific directory",
@@ -158,6 +146,13 @@ export function getRecommendation(
 
   // Check for specific auto-transform strategies
   if (shouldTakeTheirsTransform(path)) {
+    // If our version has kilocode_change markers, flag for manual review
+    if (currentContent?.includes("kilocode_change")) {
+      return {
+        recommendation: "manual",
+        reason: "File has kilocode_change markers — auto-transform skipped, needs manual review",
+      }
+    }
     return {
       recommendation: "take-theirs-transform",
       reason: "Branding-only file: take upstream and apply Kilo branding transforms",
@@ -166,26 +161,46 @@ export function getRecommendation(
 
   switch (type) {
     case "i18n":
+      // i18n files that have kilocode_change markers need manual review
+      if (currentContent?.includes("kilocode_change")) {
+        return {
+          recommendation: "manual",
+          reason: "i18n file has kilocode_change markers — auto-transform skipped, needs manual review",
+        }
+      }
       return {
         recommendation: "i18n-transform",
         reason: "i18n file: take upstream translations and apply Kilo branding",
       }
-    case "tauri":
-      return {
-        recommendation: "tauri-transform",
-        reason: "Tauri config: take upstream and apply Kilo branding transforms",
-      }
     case "script":
+      if (currentContent?.includes("kilocode_change")) {
+        return {
+          recommendation: "manual",
+          reason: "Script file has kilocode_change markers — auto-transform skipped, needs manual review",
+        }
+      }
       return {
         recommendation: "script-transform",
         reason: "Script file: take upstream and transform GitHub references",
       }
     case "extension":
+      if (currentContent?.includes("kilocode_change")) {
+        return {
+          recommendation: "manual",
+          reason: "Extension file has kilocode_change markers — auto-transform skipped, needs manual review",
+        }
+      }
       return {
         recommendation: "extension-transform",
         reason: "Extension file: take upstream and apply Kilo branding",
       }
     case "web":
+      if (currentContent?.includes("kilocode_change")) {
+        return {
+          recommendation: "manual",
+          reason: "Web/docs file has kilocode_change markers — auto-transform skipped, needs manual review",
+        }
+      }
       return {
         recommendation: "web-transform",
         reason: "Web/docs file: take upstream and apply Kilo branding",
@@ -196,6 +211,12 @@ export function getRecommendation(
         reason: "Markdown files are typically Kilo-specific documentation",
       }
     case "package":
+      if (currentContent?.includes("kilocode_change")) {
+        return {
+          recommendation: "manual",
+          reason: "package.json has kilocode_change markers — auto-transform skipped, needs manual review",
+        }
+      }
       return {
         recommendation: "package-transform",
         reason: "Package.json: take upstream, transform names, inject Kilo deps, preserve version",
@@ -245,7 +266,11 @@ export async function analyzeConflicts(
 
   for (const path of files) {
     const type = classifyFile(path)
-    const { recommendation, reason } = getRecommendation(path, keepOurs, skipFiles)
+    // Read current file content (our version) to detect kilocode_change markers
+    const content = await Bun.file(path)
+      .text()
+      .catch(() => "")
+    const { recommendation, reason } = getRecommendation(path, keepOurs, skipFiles, content)
 
     conflicts.push({
       path,
@@ -290,7 +315,6 @@ export function generateMarkdownReport(report: ConflictReport): string {
     "skip",
     "i18n-transform",
     "take-theirs-transform",
-    "tauri-transform",
     "package-transform",
     "script-transform",
     "extension-transform",
@@ -309,7 +333,6 @@ export function generateMarkdownReport(report: ConflictReport): string {
       skip: "Skip (Auto-Remove)",
       "i18n-transform": "i18n Transform (Auto-Apply Kilo Branding)",
       "take-theirs-transform": "Take Upstream + Kilo Branding (Auto)",
-      "tauri-transform": "Tauri Config Transform (Auto)",
       "package-transform": "Package.json Transform (Auto)",
       "script-transform": "Script Transform (Auto)",
       "extension-transform": "Extension Transform (Auto)",

@@ -1,29 +1,17 @@
-# Mermaid Diagram Features
+# Mermaid Diagrams
 
-Interactive actions around Mermaid diagram rendering, error handling, and AI-assisted fixes.
+Chat Markdown renders fenced `mermaid` code blocks as diagrams after a response finishes streaming.
 
-## Location (kilocode-legacy)
+## Behavior
 
-These components exist in the [kilocode-legacy](https://github.com/Kilo-Org/kilocode-legacy) repo, not in this extension:
+- Valid `mermaid` fences render inline as SVG diagrams.
+- The original Mermaid source remains available through the existing code-block copy button.
+- Rendered diagrams include Copy and Download menus for Mermaid source, SVG, and PNG formats.
+- Invalid Mermaid syntax shows a contained error state and keeps the source visible.
+- Diagrams are not rendered while a message is streaming, which avoids repeated parse/render work on every token.
+- Diagram colors are derived from the active VS Code/Kilo CSS variables so light, dark, and high-contrast themes can render with matching backgrounds, text, borders, and link colors.
 
-- `webview-ui/src/components/common/MermaidBlock.tsx`
-- `webview-ui/src/components/common/MermaidButton.tsx`
+## Limitations
 
-## Interactions
-
-- **"Fix with AI" button** - Auto-fixes mermaid syntax errors using AI (`MermaidSyntaxFixer`)
-- Copy button for diagram code
-- Click to open rendered diagram as PNG in editor
-- Error expansion with original code display
-- Loading states during processing ("Fixing syntax...", "Loading...")
-- Shows both fixed and original versions when syntax fix is applied
-
-## Suggested migration
-
-**Reimplement?** Mostly no for rendering; **yes/adapter work** for "Fix with AI".
-
-- Mermaid rendering/copy/open-PNG is a webview concern; keep the existing UI.
-- The **"Fix with AI"** action currently relies on Kilo-side AI plumbing. With the agent runtime moving to Kilo CLI per [`docs/opencode-core/opencode-migration-plan.md`](docs/opencode-core/opencode-migration-plan.md:1), you likely need to re-route this button to:
-  - either a dedicated Kilo CLI prompt/tool that returns corrected Mermaid source, or
-  - a small Kilo-side helper that asks Kilo CLI to fix the snippet (so the button remains functional without the legacy Kilo orchestration loop).
-- Kilo CLI UI doesn't appear to ship an equivalent Mermaid renderer/fixer (only a Mermaid file icon is present in [`packages/ui/src/components/file-icons/types.ts`](https://github.com/Kilo-Org/kilocode/blob/main/packages/ui/src/components/file-icons/types.ts:1)).
+- Mermaid is bundled by the current webview build, so bundle splitting remains a future optimization.
+- Advanced legacy actions are not restored yet: AI syntax fixing and zoom modal.

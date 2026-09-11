@@ -9,10 +9,11 @@
 import { $ } from "bun"
 import { info, success, warn, debug } from "../utils/logger"
 import { defaultConfig } from "../utils/config"
+import { oursHasKilocodeChanges } from "../utils/git"
 
 export interface ScriptTransformResult {
   file: string
-  action: "transformed" | "skipped" | "failed"
+  action: "transformed" | "skipped" | "failed" | "flagged"
   replacements: number
   dryRun: boolean
 }
@@ -59,6 +60,13 @@ const SCRIPT_REPLACEMENTS: ScriptReplacement[] = [
     pattern: /anomalyco\/opencode/g,
     replacement: "Kilo-Org/kilocode",
     description: "GitHub repo reference",
+  },
+
+  // Release artifact names
+  {
+    pattern: /opencode-(linux|darwin|windows)-(arm64|x64)(-baseline)?(\.tar\.gz|\.zip)?/g,
+    replacement: "kilo-$1-$2$3$4",
+    description: "Release artifact name",
   },
 
   // Environment variables (exclude OPENCODE_API_KEY)
@@ -128,6 +136,12 @@ export async function transformScriptFile(
   if (options.dryRun) {
     info(`[DRY-RUN] Would transform script: ${file}`)
     return { file, action: "transformed", replacements: 0, dryRun: true }
+  }
+
+  // If our version has kilocode_change markers, flag for manual resolution
+  if (await oursHasKilocodeChanges(file)) {
+    warn(`${file} has kilocode_change markers — skipping auto-transform, needs manual resolution`)
+    return { file, action: "flagged", replacements: 0, dryRun: false }
   }
 
   try {

@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import { t } from "./shims/i18n"
+import { t } from "../i18n"
 import type { AutocompleteStatusBarStateProps } from "./types"
 import { humanFormatSessionCost, formatTime } from "./statusbar-utils"
 
@@ -86,20 +86,10 @@ export class AutocompleteStatusBar {
   }
 
   public render() {
-    if (this.props.hasKilocodeProfileWithNoBalance) {
-      return this.renderNoCreditsError()
-    }
     if (this.props.hasNoUsableProvider) {
       return this.renderNoUsableProviderError()
     }
     return this.renderDefault()
-  }
-
-  private renderNoCreditsError() {
-    this.statusBar.text = t("kilocode:autocomplete.statusBar.warning")
-    this.statusBar.tooltip = this.createMarkdownTooltip(
-      t("kilocode:autocomplete.statusBar.tooltip.noCredits", { command: SETTINGS_COMMAND }),
-    )
   }
 
   private renderNoUsableProviderError() {
